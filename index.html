@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Trafik Polisi Kovalamacası - Online Multiplayer Araba Oyunu</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- 3D WebGL Motoru (Three.js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Canlı Online Multiplayer Motoru (MQTT WebSockets) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 3D WebGL Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Üst HUD / Göstergeler -->
+        <div id="hud">
+            <!-- Sol: Hız ve Hasar -->
+            <div class="hud-panel left-panel">
+                <div class="stat-box">
+                    <span class="stat-label">HIZ</span>
+                    <span class="stat-value" id="speedVal">0 <small>KM/H</small></span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">ARAÇ SAĞLIĞI</span>
+                    <div class="bar-container">
+                        <div id="healthBar" class="bar-fill health"></div>
+                    </div>
+                    <span class="stat-sub" id="healthText">%100 Sağlam</span>
+                </div>
+            </div>
+
+            <!-- Orta: Sinyaller, Uyarılar & Online Bilgisi -->
+            <div class="hud-panel center-panel">
+                <!-- Sinyal Okları -->
+                <div class="signals-hud">
+                    <div id="leftSignalIndicator" class="signal-arrow left-arrow">◀</div>
+                    <div class="signal-text">3D SİNYAL</div>
+                    <div id="rightSignalIndicator" class="signal-arrow right-arrow">▶</div>
+                </div>
+
+                <!-- Online Oyuncu Sayısı Rozeti -->
+                <div id="onlineBadge" class="online-badge hidden">
+                    <span class="live-dot"></span> <span id="onlineCountText">ONLİNE: 1 Oyuncu</span>
+                </div>
+
+                <!-- Polis Aranma Seviyesi (Heat) -->
+                <div class="wanted-container">
+                    <div class="wanted-title">ARANMA DÜZEYİ</div>
+                    <div class="stars-container" id="wantedStars">
+                        <span class="star">★</span>
+                        <span class="star">★</span>
+                        <span class="star">★</span>
+                        <span class="star">★</span>
+                        <span class="star">★</span>
+                    </div>
+                </div>
+
+                <!-- Anlık Kural İhlali Uyarısı -->
+                <div id="warningBadge" class="warning-badge hidden">
+                    ⚠️ ŞERİT İHLALİ!
+                </div>
+            </div>
+
+            <!-- Sağ: Puan / Hedef & Ayarlar -->
+            <div class="hud-panel right-panel">
+                <div class="stat-box">
+                    <span class="stat-label">TOPLANAN PUAN</span>
+                    <span class="stat-value gold" id="scoreVal">0 / 25</span>
+                </div>
+                <div class="stat-box">
+                    <button id="cameraBtn" class="hud-btn" style="margin-bottom: 5px;">🎥 KAMERA [C]</button>
+                    <button id="muteBtn" class="hud-btn">🔊 SES AÇIK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Radar / Mini Harita -->
+        <div id="minimapContainer">
+            <canvas id="minimapCanvas" width="130" height="130"></canvas>
+            <div class="minimap-title">3D RADAR</div>
+        </div>
+
+        <!-- Online Canlı Sohbet / Bilgi Kutusu -->
+        <div id="chatContainer" class="hidden">
+            <div id="chatMessages"></div>
+            <form id="chatForm">
+                <input type="text" id="chatInput" placeholder="Mesaj yaz veya korna çal (H)..." autocomplete="off" maxlength="60">
+                <button type="submit" id="chatSendBtn">GÖNDER</button>
+                <button type="button" id="hornBtn" class="horn-btn">📢 KORNA</button>
+            </form>
+        </div>
+
+        <!-- Mobil Dokunmatik Kontroller -->
+        <div id="mobileControls">
+            <div class="mobile-group left-group">
+                <button class="mobile-btn" id="mLeftBtn">◀</button>
+                <button class="mobile-btn" id="mRightBtn">▶</button>
+                <div class="mobile-row">
+                    <button class="mobile-btn small-btn" id="mSignalL">Sol [Q]</button>
+                    <button class="mobile-btn small-btn" id="mSignalR">Sağ [E]</button>
+                </div>
+            </div>
+            <div class="mobile-group right-group">
+                <button class="mobile-btn gas-btn" id="mGasBtn">▲ GAZ</button>
+                <button class="mobile-btn brake-btn" id="mBrakeBtn">▼ FREN</button>
+                <div class="mobile-row">
+                    <button class="mobile-btn small-btn" id="mHornBtn">📢 KORNA</button>
+                    <button class="mobile-btn small-btn" id="mDriftBtn">DRIFT</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Başlangıç Menüsü (Tek Kişilik vs Online Seçimi) -->
+        <div id="startScreen" class="overlay-screen">
+            <div class="modal-card">
+                <h1 class="glow-title">3D TRAFİK POLİSİ KOVALAMACASI</h1>
+                <p class="subtitle">Online web araba oyunu! Tek başına oyna veya aynı web sitesine giren herkesle canlı haritada toplan!</p>
+                
+                <!-- Kullanıcı Adı Girişi -->
+                <div class="player-name-box">
+                    <label for="playerNameInput">OYUNCU ADINIZ:</label>
+                    <input type="text" id="playerNameInput" placeholder="Sürücü" maxlength="15" value="Sürücü">
+                </div>
+
+                <!-- Oyun Modu Seçim Butonları -->
+                <div class="mode-buttons-grid">
+                    <button type="button" id="startOnlineBtn" class="action-btn online-pulse" onclick="window.startGame && window.startGame(true)">
+                        <span class="btn-icon">🌐</span>
+                        <span class="btn-text">
+                            <strong>CANLI ONLİNE MOD</strong>
+                            <small>Aynı sitedeki herkesle aynı meydanda toplan!</small>
+                        </span>
+                    </button>
+                    <button type="button" id="startSoloBtn" class="action-btn solo-btn" onclick="window.startGame && window.startGame(false)">
+                        <span class="btn-icon">🏎️</span>
+                        <span class="btn-text">
+                            <strong>TEK KİŞİLİK MOD</strong>
+                            <small>25 puanı topla, kurallara uy, polisten kaç!</small>
+                        </span>
+                    </button>
+                </div>
+
+                <div class="rules-card">
+                    <h3>⚠️ KURALLAR & ONLİNE ÖZELLİKLER:</h3>
+                    <ul>
+                        <li><span class="key-badge">ONLİNE</span> Siteye giren herkes <b>aynı şehir meydanında</b> toplanır, diğer sürücüleri ve isimlerini 3D görürsün!</li>
+                        <li><span class="key-badge">ŞERİT</span> Yoldan kaldırıma çıkarsan polis aranma seviyesi artar!</li>
+                        <li><span class="key-badge">SİNYAL</span> Dönüşlerde <b>Q</b> (Sol) veya <b>E</b> (Sağ) sinyali vermek zorunludur!</li>
+                        <li><span class="key-badge">DUVARLAR</span> Binalara çarptıkça araba arızalanır ve motor duman tütmeye başlar!</li>
+                        <li><span class="key-badge">KORNA</span> <b>H</b> tuşuna basarak diğer online oyunculara korna çalabilirsin!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Ekranı -->
+        <div id="gameOverScreen" class="overlay-screen hidden">
+            <div class="modal-card game-over-card">
+                <div class="stamp-badge">YAKALANDIN!</div>
+                <h2 id="gameOverTitle">POLİSE YAKALANDIN</h2>
+                <p id="gameOverReason">Trafik kurallarına uymadın ve ekipler seni kıstırdı!</p>
+                <div class="score-summary">
+                    <span>Toplanan Puan: <b id="finalScore">0 / 25</b></span>
+                </div>
+                <button type="button" id="restartBtn" class="action-btn retry" onclick="window.startGame && window.startGame(window.gameInstance ? window.gameInstance.isOnlineMode : false)">TEKRAR DENE</button>
+            </div>
+        </div>
+
+        <!-- Kazanma (Victory) Ekranı -->
+        <div id="winScreen" class="overlay-screen hidden">
+            <div class="modal-card win-card">
+                <div class="trophy-icon">🏆</div>
+                <h2>GÖREV TAMAMLANDI!</h2>
+                <p>3D şehirdeki tüm puanları topladın ve polislere yakalanmadan kaçmayı başardın!</p>
+                <div class="score-summary win-stat">
+                    <span>TOPLAM PUAN: <b>25 / 25 TAM PUAN!</b></span>
+                </div>
+                <button type="button" id="winRestartBtn" class="action-btn success" onclick="window.startGame && window.startGame(window.gameInstance ? window.gameInstance.isOnlineMode : false)">YENİDEN OYNA</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

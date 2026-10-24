@@ -1,0 +1,745 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #0b0f19;
+    font-family: 'Rajdhani', sans-serif;
+    color: #ffffff;
+}
+
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background-color: #0b101d;
+}
+
+/* ---------------- HUD STYLES ---------------- */
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.hud-panel {
+    display: flex;
+    gap: 16px;
+    background: rgba(13, 17, 28, 0.88);
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.7), inset 0 0 15px rgba(0, 240, 255, 0.05);
+    backdrop-filter: blur(8px);
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #8da2c0;
+    font-family: 'Orbitron', sans-serif;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    font-family: 'Orbitron', sans-serif;
+    color: #00f0ff;
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+}
+
+.stat-value small {
+    font-size: 12px;
+    color: #8da2c0;
+}
+
+.stat-value.gold {
+    color: #ffc400;
+    text-shadow: 0 0 12px rgba(255, 196, 0, 0.6);
+}
+
+.stat-sub {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+    color: #2bd882;
+}
+
+/* Hasar Barı */
+.bar-container {
+    width: 130px;
+    height: 12px;
+    background: #141a26;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #32425a;
+}
+
+.bar-fill.health {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff3366 0%, #ffaa00 40%, #00ff88 100%);
+    transition: width 0.2s ease-out;
+}
+
+/* Sinyaller ve Uyarılar */
+.center-panel {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    border-color: rgba(255, 200, 0, 0.3);
+}
+
+.signals-hud {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.signal-arrow {
+    font-size: 26px;
+    color: #2b3b4a;
+    transition: color 0.1s, text-shadow 0.1s;
+}
+
+.signal-arrow.active {
+    color: #00ff88;
+    text-shadow: 0 0 15px #00ff88, 0 0 25px #00ff88;
+    animation: blink 0.5s infinite alternate;
+}
+
+@keyframes blink {
+    from { opacity: 0.2; }
+    to { opacity: 1; }
+}
+
+.signal-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #8da2c0;
+}
+
+/* Canlı Online Rozeti */
+.online-badge {
+    background: rgba(0, 255, 136, 0.15);
+    border: 1px solid #00ff88;
+    color: #00ff88;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+}
+
+.online-badge.hidden {
+    display: none;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    background: #00ff88;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #00ff88;
+    animation: livePulse 1s infinite alternate;
+}
+
+@keyframes livePulse {
+    from { transform: scale(0.8); opacity: 0.5; }
+    to { transform: scale(1.3); opacity: 1; }
+}
+
+/* Aranma Düzeyi (Wanted Stars) */
+.wanted-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.wanted-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #ff3366;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.stars-container {
+    display: flex;
+    gap: 4px;
+    font-size: 18px;
+    color: #2a3344;
+}
+
+.stars-container .star.active {
+    color: #ff2a5f;
+    text-shadow: 0 0 10px #ff2a5f, 0 0 20px #ff2a5f;
+    animation: starPulse 0.6s infinite alternate;
+}
+
+@keyframes starPulse {
+    from { transform: scale(1); }
+    to { transform: scale(1.15); }
+}
+
+/* Uyarı Rozeti */
+.warning-badge {
+    background: #ff2a5f;
+    color: #ffffff;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    box-shadow: 0 0 15px rgba(255, 42, 95, 0.8);
+    animation: blink 0.3s infinite alternate;
+    white-space: nowrap;
+}
+
+.warning-badge.hidden {
+    display: none;
+}
+
+/* Ses ve Kamera Butonları */
+.hud-btn {
+    pointer-events: auto;
+    background: #192336;
+    color: #00f0ff;
+    border: 1px solid #00f0ff44;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-family: 'Orbitron', sans-serif;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.hud-btn:hover {
+    background: #00f0ff22;
+    border-color: #00f0ff;
+    box-shadow: 0 0 10px #00f0ff55;
+}
+
+/* ---------------- RADAR / MINIMAP ---------------- */
+#minimapContainer {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    width: 130px;
+    height: 130px;
+    background: rgba(11, 15, 25, 0.9);
+    border: 2px solid #00f0ff55;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(0, 240, 255, 0.25);
+    z-index: 10;
+    pointer-events: none;
+}
+
+#minimapCanvas {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+}
+
+.minimap-title {
+    position: absolute;
+    top: 5px;
+    width: 100%;
+    text-align: center;
+    font-size: 9px;
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 2px;
+    color: #00f0ffbb;
+}
+
+/* ---------------- ONLİNE CHAT / SOHBET ---------------- */
+#chatContainer {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    width: 320px;
+    background: rgba(13, 17, 28, 0.88);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    border-radius: 12px;
+    padding: 10px;
+    backdrop-filter: blur(8px);
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+}
+
+#chatContainer.hidden {
+    display: none;
+}
+
+#chatMessages {
+    height: 90px;
+    overflow-y: auto;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding-right: 4px;
+}
+
+#chatMessages::-webkit-scrollbar {
+    width: 4px;
+}
+#chatMessages::-webkit-scrollbar-thumb {
+    background: #00f0ff44;
+    border-radius: 2px;
+}
+
+.chat-msg {
+    color: #d1dcec;
+    word-break: break-word;
+}
+.chat-msg b {
+    color: #00f0ff;
+}
+.chat-msg.system {
+    color: #00ff88;
+    font-style: italic;
+    font-size: 12px;
+}
+.chat-msg.horn {
+    color: #ffaa00;
+    font-weight: bold;
+}
+
+#chatForm {
+    display: flex;
+    gap: 6px;
+}
+
+#chatInput {
+    flex: 1;
+    background: #141c2c;
+    border: 1px solid #23344f;
+    border-radius: 6px;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: 'Rajdhani', sans-serif;
+    outline: none;
+}
+#chatInput:focus {
+    border-color: #00f0ff;
+}
+
+#chatSendBtn, .horn-btn {
+    background: #00f0ff22;
+    border: 1px solid #00f0ff;
+    color: #00f0ff;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#chatSendBtn:hover, .horn-btn:hover {
+    background: #00f0ff;
+    color: #000;
+}
+
+.horn-btn {
+    border-color: #ffaa00;
+    color: #ffaa00;
+    background: rgba(255, 170, 0, 0.15);
+}
+.horn-btn:hover {
+    background: #ffaa00;
+    color: #000;
+}
+
+/* ---------------- MOBİL KONTROLLER ---------------- */
+#mobileControls {
+    position: absolute;
+    bottom: 20px;
+    left: 15px;
+    right: 15px;
+    display: none;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    z-index: 15;
+}
+
+@media (max-width: 900px), (hover: none) {
+    #mobileControls {
+        display: flex;
+    }
+    #chatContainer {
+        bottom: 150px;
+        left: 15px;
+        width: 250px;
+    }
+    #minimapContainer {
+        bottom: auto;
+        top: 110px;
+        right: 15px;
+        width: 95px;
+        height: 95px;
+    }
+}
+
+.mobile-group {
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.mobile-btn {
+    width: 65px;
+    height: 65px;
+    background: rgba(20, 30, 48, 0.85);
+    border: 2px solid #00f0ff66;
+    color: #ffffff;
+    font-size: 22px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.mobile-btn:active {
+    background: #00f0ff44;
+    transform: scale(0.95);
+}
+
+.mobile-btn.gas-btn {
+    background: rgba(0, 180, 100, 0.4);
+    border-color: #00ff88;
+    color: #00ff88;
+    font-size: 14px;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.mobile-btn.brake-btn {
+    background: rgba(220, 40, 70, 0.4);
+    border-color: #ff3366;
+    color: #ff3366;
+    font-size: 14px;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.mobile-btn.small-btn {
+    width: 65px;
+    height: 38px;
+    font-size: 10px;
+    background: rgba(30, 45, 70, 0.85);
+    border-color: #ffc40088;
+    color: #ffc400;
+}
+
+.mobile-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* ---------------- EKRAN OVERLAYLERİ & MODAL ---------------- */
+.overlay-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(5, 8, 15, 0.92);
+    backdrop-filter: blur(14px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    padding: 20px;
+    transition: opacity 0.3s ease;
+    pointer-events: auto;
+}
+
+/* Gizli ekranlar ASLA tıklamaları engellememeli! */
+.overlay-screen.hidden {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+}
+
+#startScreen {
+    z-index: 200;
+}
+
+.modal-card {
+    background: linear-gradient(145deg, #121927 0%, #0a0e18 100%);
+    border: 2px solid #00f0ff55;
+    border-radius: 20px;
+    padding: 30px 35px;
+    max-width: 620px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 0 50px rgba(0, 240, 255, 0.25), inset 0 0 30px rgba(0, 0, 0, 0.8);
+    animation: modalPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    pointer-events: auto;
+    position: relative;
+    z-index: 201;
+}
+
+@keyframes modalPop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.glow-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 26px;
+    font-weight: 900;
+    color: #00f0ff;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(0, 240, 255, 0.7);
+    margin-bottom: 6px;
+}
+
+.subtitle {
+    color: #a4b7d1;
+    font-size: 15px;
+    margin-bottom: 18px;
+}
+
+/* Oyuncu Adı Girişi */
+.player-name-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    background: rgba(18, 26, 42, 0.8);
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 240, 255, 0.3);
+}
+
+.player-name-box label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: #00f0ff;
+    letter-spacing: 1px;
+}
+
+.player-name-box input {
+    background: #0d131f;
+    border: 1px solid #00f0ff66;
+    color: #ffea00;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: 'Rajdhani', sans-serif;
+    padding: 6px 12px;
+    border-radius: 6px;
+    outline: none;
+    text-align: center;
+    width: 160px;
+}
+.player-name-box input:focus {
+    box-shadow: 0 0 10px #00f0ff;
+}
+
+/* Mod Butonları Grid */
+.mode-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.action-btn {
+    border: none;
+    color: #050810;
+    font-family: 'Orbitron', sans-serif;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.6);
+    transition: all 0.2s;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    pointer-events: auto;
+    position: relative;
+    z-index: 205;
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+}
+
+.action-btn:active {
+    transform: scale(0.97);
+}
+
+/* Buton içindeki simge ve metinlerin tıklamayı engellememesi için */
+.action-btn * {
+    pointer-events: none;
+}
+
+.action-btn.online-pulse {
+    background: linear-gradient(135deg, #00ff88 0%, #009944 100%);
+    color: #041209;
+    box-shadow: 0 0 25px rgba(0, 255, 136, 0.6);
+    animation: onlineGlow 1.8s infinite alternate;
+}
+
+@keyframes onlineGlow {
+    from { box-shadow: 0 0 15px rgba(0, 255, 136, 0.5); }
+    to { box-shadow: 0 0 35px rgba(0, 255, 136, 0.9); }
+}
+
+.action-btn.solo-btn {
+    background: linear-gradient(135deg, #00f0ff 0%, #0077ff 100%);
+    color: #050810;
+}
+
+.btn-icon {
+    font-size: 28px;
+}
+.btn-text strong {
+    display: block;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+.btn-text small {
+    display: block;
+    font-size: 11px;
+    opacity: 0.85;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+}
+
+.rules-card {
+    background: rgba(18, 26, 42, 0.8);
+    border: 1px solid rgba(255, 170, 0, 0.3);
+    border-radius: 12px;
+    padding: 14px 18px;
+    text-align: left;
+}
+
+.rules-card h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    color: #ffaa00;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.rules-card ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    color: #d1dcec;
+}
+
+.key-badge {
+    background: #ff336622;
+    color: #ff3366;
+    border: 1px solid #ff336666;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: 'Orbitron', sans-serif;
+    border-radius: 4px;
+    font-weight: bold;
+    display: inline-block;
+    margin-right: 6px;
+}
+
+/* Game Over & Win Kartları */
+.game-over-card {
+    border-color: #ff3366;
+    box-shadow: 0 0 50px rgba(255, 51, 102, 0.4);
+}
+
+.stamp-badge {
+    display: inline-block;
+    padding: 6px 18px;
+    border: 3px solid #ff3366;
+    color: #ff3366;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    transform: rotate(-6deg);
+    margin-bottom: 12px;
+}
+
+.score-summary {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 17px;
+    color: #ffc400;
+    margin-bottom: 20px;
+}
+
+.action-btn.retry {
+    background: linear-gradient(135deg, #ff3366 0%, #a00030 100%);
+    color: #fff;
+    width: 100%;
+    justify-content: center;
+}
+
+.action-btn.success {
+    background: linear-gradient(135deg, #00ff88 0%, #009944 100%);
+    color: #05140d;
+    width: 100%;
+    justify-content: center;
+}
+
+.win-card {
+    border-color: #00ff88;
+    box-shadow: 0 0 50px rgba(0, 255, 136, 0.4);
+}
+.trophy-icon {
+    font-size: 60px;
+    margin-bottom: 8px;
+}
