@@ -1055,91 +1055,153 @@ class OnlineMultiplayerManager {
         this.myColor = [0x00f0ff, 0xff0077, 0x00ff88, 0xff9900, 0xbb00ff, 0x00d4ff][Math.floor(Math.random() * 6)];
         this.otherPlayers = new Map();
 
-        this.topicPlayers = 'polis3d_v1/players';
-        this.topicChat = 'polis3d_v1/chat';
-        this.topicHorn = 'polis3d_v1/horn';
+        this.topicPlayers = 'polis3d_v2/players';
+        this.topicChat   = 'polis3d_v2/chat';
+        this.topicHorn   = 'polis3d_v2/horn';
 
         this.broadcastInterval = null;
         this.welcomed = false;
         this.announcedPlayers = new Set();
+        this.brokerIndex = 0;
+        this.connectTimeout = null;
+
+        // Yedek broker listesi - biri çalışmazsa diğerini dener
+        this.brokers = [
+            'wss://broker.hivemq.com:8884/mqtt',
+            'wss://test.mosquitto.org:8081/mqtt',
+            'wss://broker.emqx.io:8084/mqtt'
+        ];
     }
 
     connect(playerName) {
         this.myName = playerName || 'Sürücü';
-        const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+
+        if (typeof mqtt === 'undefined') {
+            console.warn('MQTT kütüphanesi yüklenemedi.');
+            this.addChatMessage('SİSTEM', '⚠️ Online kütüphanesi yüklenemedi. Sayfayı yenileyip tekrar dene.', 'system');
+            return;
+        }
+
+        this._tryConnect(0);
+    }
+
+    _tryConnect(idx) {
+        if (idx >= this.brokers.length) {
+            this.addChatMessage('SİSTEM', '❌ Tüm sunuculara bağlanılamadı. İnternet bağlantını kontrol et.', 'system');
+            return;
+        }
+
+        // Önceki bağlantıyı temizle
+        if (this.client) {
+            try { this.client.end(true); } catch(_) {}
+            this.client = null;
+        }
+        this.connected = false;
+
+        const brokerUrl = this.brokers[idx];
+        this.addChatMessage('SİSTEM', `🔌 Sunucuya bağlanılıyor... (${idx + 1}/${this.brokers.length})`, 'system');
 
         try {
-            if (typeof mqtt === 'undefined') {
-                console.warn('MQTT kütüphanesi hazır değil.');
-                this.addChatMessage('SİSTEM', 'Online sunucu kütüphanesi hazır değil. Yerel modda başlatıldı.', 'system');
-                return;
-            }
-
             this.client = mqtt.connect(brokerUrl, {
-                clientId: this.myId,
+                clientId: this.myId + '_' + Math.random().toString(36).substr(2, 4),
                 clean: true,
+                connectTimeout: 8000,
+                reconnectPeriod: 0,   // Otomatik yeniden denemeyi biz yönetiyoruz
                 keepalive: 30
             });
-
-            this.client.on('connect', () => {
-                this.connected = true;
-                this.client.subscribe([this.topicPlayers, this.topicChat, this.topicHorn]);
-                
-                // Yalnızca İLK bağlantıda 1 KEZ hoş geldin mesajı ver:
-                if (!this.welcomed) {
-                    this.welcomed = true;
-                    this.addChatMessage('SİSTEM', `Online meydana hoş geldin ${this.myName}!`, 'system');
-                }
-
-                document.getElementById('onlineBadge').classList.remove('hidden');
-                document.getElementById('chatContainer').classList.remove('hidden');
-
-                if (!this.broadcastInterval) {
-                    this.broadcastInterval = setInterval(() => this.broadcastPosition(), 60);
-                }
-            });
-
-            this.client.on('message', (topic, message) => {
-                try {
-                    const data = JSON.parse(message.toString());
-                    if (data.id === this.myId) return; // Kendi mesajlarımızı atla
-
-                    if (topic === this.topicPlayers) {
-                        this.handlePlayerUpdate(data);
-                    } else if (topic === this.topicChat) {
-                        this.addChatMessage(data.name, data.text);
-                    } else if (topic === this.topicHorn) {
-                        audio.playHorn();
-                        this.addChatMessage(data.name, '📢 KORNA ÇALDI! (DÜÜT DÜÜT)', 'horn');
-                    }
-                } catch (e) {
-                    console.error('MQTT Mesaj parse hatası', e);
-                }
-            });
-
-            this.client.on('error', (err) => {
-                console.warn('Online bağlantı uyarısı:', err);
-            });
-        } catch (e) {
-            console.error('MQTT başlatılamadı:', e);
+        } catch(e) {
+            console.error('MQTT connect hatası:', e);
+            this._tryConnect(idx + 1);
+            return;
         }
+
+        // 10 sn içinde bağlanamazsa sonraki broker'a geç
+        clearTimeout(this.connectTimeout);
+        this.connectTimeout = setTimeout(() => {
+            if (!this.connected) {
+                console.warn(`Broker ${idx} zaman aşımı, sonraki deneniyor...`);
+                this._tryConnect(idx + 1);
+            }
+        }, 10000);
+
+        this.client.on('connect', () => {
+            clearTimeout(this.connectTimeout);
+            this.connected = true;
+
+            this.client.subscribe([this.topicPlayers, this.topicChat, this.topicHorn], (err) => {
+                if (err) console.warn('Subscribe hatası:', err);
+            });
+
+            // Yalnızca İLK bağlantıda 1 KEZ hoş geldin mesajı ver
+            if (!this.welcomed) {
+                this.welcomed = true;
+                this.addChatMessage('SİSTEM', `✅ Online bağlantı kuruldu! Hoş geldin ${this.myName}!`, 'system');
+            }
+
+            const badge = document.getElementById('onlineBadge');
+            const chat  = document.getElementById('chatContainer');
+            if (badge) badge.classList.remove('hidden');
+            if (chat)  chat.classList.remove('hidden');
+
+            if (!this.broadcastInterval) {
+                this.broadcastInterval = setInterval(() => this.broadcastPosition(), 60);
+            }
+        });
+
+        this.client.on('message', (topic, message) => {
+            try {
+                const data = JSON.parse(message.toString());
+                if (!data || data.id === this.myId) return;
+
+                if (topic === this.topicPlayers) {
+                    this.handlePlayerUpdate(data);
+                } else if (topic === this.topicChat) {
+                    this.addChatMessage(data.name || '?', data.text || '');
+                } else if (topic === this.topicHorn) {
+                    if (typeof audio !== 'undefined') audio.playHorn();
+                    this.addChatMessage(data.name || '?', '📢 KORNA ÇALDI! (DÜÜT DÜÜT)', 'horn');
+                }
+            } catch (e) {
+                // parse hatası → sessizce geç
+            }
+        });
+
+        this.client.on('error', (err) => {
+            console.warn('MQTT Bağlantı hatası:', err.message || err);
+            if (!this.connected) {
+                clearTimeout(this.connectTimeout);
+                this._tryConnect(idx + 1);
+            }
+        });
+
+        this.client.on('close', () => {
+            if (this.connected) {
+                this.connected = false;
+                this.addChatMessage('SİSTEM', '⚠️ Sunucu bağlantısı kesildi. Yeniden deneniyor...', 'system');
+                setTimeout(() => this._tryConnect(0), 3000);
+            }
+        });
     }
 
     broadcastPosition() {
-        if (!this.connected || !this.client) return;
-        const payload = {
-            id: this.myId,
-            name: this.myName,
-            color: this.myColor,
-            x: Math.round(this.game.player.x * 10) / 10,
-            z: Math.round(this.game.player.z * 10) / 10,
-            angle: Math.round(this.game.player.angle * 100) / 100,
-            speed: Math.round(this.game.player.speed * 100) / 100,
-            signal: this.game.player.signal,
-            signalBlink: this.game.player.signalBlinkState,
-            health: this.game.player.health
-        };
-        this.client.publish(this.topicPlayers, JSON.stringify(payload));
+        if (!this.connected || !this.client || !this.game.player) return;
+        try {
+            const payload = {
+                id: this.myId,
+                name: this.myName,
+                color: this.myColor,
+                x: Math.round(this.game.player.x * 10) / 10,
+                z: Math.round(this.game.player.z * 10) / 10,
+                angle: Math.round(this.game.player.angle * 100) / 100,
+                speed: Math.round(this.game.player.speed * 100) / 100,
+                signal: this.game.player.signal || 0,
+                signalBlink: this.game.player.signalBlinkState || false,
+                health: this.game.player.health || 100
+            };
+            this.client.publish(this.topicPlayers, JSON.stringify(payload));
+        } catch(e) {
+            // yayın hatası → sessizce geç
+        }
     }
 
     handlePlayerUpdate(data) {
@@ -1189,10 +1251,12 @@ class OnlineMultiplayerManager {
     }
 
     sendHorn() {
-        audio.playHorn();
+        if (typeof audio !== 'undefined') audio.playHorn();
         if (this.connected && this.client) {
-            const payload = { id: this.myId, name: this.myName };
-            this.client.publish(this.topicHorn, JSON.stringify(payload));
+            try {
+                const payload = { id: this.myId, name: this.myName };
+                this.client.publish(this.topicHorn, JSON.stringify(payload));
+            } catch(e) {}
         }
         this.addChatMessage(this.myName, '📢 KORNA ÇALDI!', 'horn');
     }
